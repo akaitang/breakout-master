@@ -1,0 +1,201 @@
+
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BREAKOUT MASTER｜打磚塊大師</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:radial-gradient(ellipse at top,#1d3559,#070c18 75%);color:#eaf5ff;font-family:Arial,"Microsoft JhengHei",sans-serif;display:flex;align-items:center;justify-content:center}
+.app{width:min(96vw,850px);padding:18px}
+h1{text-align:center;letter-spacing:3px;color:#67e8f9;margin:8px 0}
+.sub{text-align:center;color:#91a7c5;margin-bottom:18px}
+.hud{display:flex;justify-content:space-between;gap:12px;margin-bottom:12px;font-weight:bold}
+canvas{display:block;width:100%;height:auto;background:#080f21;border:2px solid #2b4969;border-radius:14px;box-shadow:0 0 35px #0b8aca33;cursor:none}
+.controls{text-align:center;color:#a9bdd7;line-height:1.8}
+button{background:#1677cf;border:0;border-radius:9px;padding:12px 24px;color:white;font-size:16px;font-weight:bold;cursor:pointer}
+button:hover{background:#2395f0}
+.actions{text-align:center;margin-top:12px}
+</style>
+</head>
+<body>
+<div class="app">
+<h1>🧱 BREAKOUT MASTER</h1>
+<div class="sub">霓虹打磚塊｜五關挑戰</div>
+<div class="hud">
+<span id="score">分數：0</span>
+<span id="level">關卡：1 / 5</span>
+<span id="lives">生命：♥♥♥</span>
+<span id="best">最高分：0</span>
+</div>
+<canvas id="game" width="800" height="520"></canvas>
+<div class="controls">滑鼠或 ← → 移動擋板｜空白鍵發球／暫停｜R 重新開始</div>
+<div class="actions"><button id="start">開始遊戲／繼續</button></div>
+</div>
+<script>
+const canvas=document.getElementById("game");
+const ctx=canvas.getContext("2d");
+const W=canvas.width,H=canvas.height;
+const scoreEl=document.getElementById("score");
+const levelEl=document.getElementById("level");
+const livesEl=document.getElementById("lives");
+const bestEl=document.getElementById("best");
+let best=0;
+try{best=Number(localStorage.getItem("breakoutBest")||0)}catch(e){}
+let score=0,lives=3,level=1,mode="ready";
+let left=false,right=false;
+let paddle={x:350,y:478,w:100,h:13,speed:9};
+let ball={x:400,y:465,vx:4,vy:-5,r:7};
+let bricks=[];
+const colors=["#fb7185","#fb923c","#facc15","#4ade80","#38bdf8","#a78bfa"];
+function buildBricks(){
+bricks=[];
+const rows=3+level,cols=10,gap=7,bw=65,bh=20;
+const start=(W-(cols*bw+(cols-1)*gap))/2;
+for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
+bricks.push({x:start+c*(bw+gap),y:64+r*29,w:bw,h:bh,alive:true,color:colors[r%colors.length]});
+}
+}
+function resetBall(){
+paddle.x=(W-paddle.w)/2;
+ball.x=paddle.x+paddle.w/2;
+ball.y=paddle.y-ball.r-2;
+const speed=5+(level-1)*.65;
+ball.vx=speed*.65;
+ball.vy=-speed;
+mode="ready";
+}
+function updateHud(){
+scoreEl.textContent="分數："+score;
+levelEl.textContent="關卡："+level+" / 5";
+livesEl.textContent="生命："+"♥".repeat(Math.max(0,lives));
+bestEl.textContent="最高分："+best;
+}
+function restart(){
+score=0;lives=3;level=1;paddle.w=100;
+buildBricks();resetBall();updateHud();
+}
+function launch(){if(mode==="ready"||mode==="paused")mode="playing";}
+document.getElementById("start").onclick=()=>{
+if(mode==="over"||mode==="won")restart();
+launch();
+};
+window.addEventListener("keydown",e=>{
+if(["ArrowLeft","ArrowRight","Space"].includes(e.code))e.preventDefault();
+if(e.code==="ArrowLeft")left=true;
+if(e.code==="ArrowRight")right=true;
+if(e.code==="Space"){
+if(mode==="playing")mode="paused";
+else if(mode==="paused"||mode==="ready")launch();
+else if(mode==="over"||mode==="won"){restart();launch();}
+}
+if(e.code==="KeyR")restart();
+});
+window.addEventListener("keyup",e=>{
+if(e.code==="ArrowLeft")left=false;
+if(e.code==="ArrowRight")right=false;
+});
+canvas.addEventListener("mousemove",e=>{
+const rect=canvas.getBoundingClientRect();
+const x=(e.clientX-rect.left)*W/rect.width;
+paddle.x=Math.max(0,Math.min(W-paddle.w,x-paddle.w/2));
+if(mode==="ready"){ball.x=paddle.x+paddle.w/2;}
+});
+canvas.addEventListener("click",()=>{
+if(mode==="ready"||mode==="paused")launch();
+});
+function circle(x,y,r,color){
+ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);
+ctx.fillStyle=color;ctx.fill();
+}
+function roundRect(x,y,w,h,r,color){
+ctx.fillStyle=color;
+ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.fill();
+}
+function update(){
+if(left)paddle.x-=paddle.speed;
+if(right)paddle.x+=paddle.speed;
+paddle.x=Math.max(0,Math.min(W-paddle.w,paddle.x));
+if(mode==="ready"){
+ball.x=paddle.x+paddle.w/2;
+ball.y=paddle.y-ball.r-2;
+return;
+}
+if(mode!=="playing")return;
+const oldX=ball.x,oldY=ball.y;
+ball.x+=ball.vx;ball.y+=ball.vy;
+if(ball.x-ball.r<0){ball.x=ball.r;ball.vx=Math.abs(ball.vx);}
+if(ball.x+ball.r>W){ball.x=W-ball.r;ball.vx=-Math.abs(ball.vx);}
+if(ball.y-ball.r<0){ball.y=ball.r;ball.vy=Math.abs(ball.vy);}
+if(ball.vy>0&&ball.y+ball.r>=paddle.y&&oldY+ball.r<=paddle.y+8&&ball.x>=paddle.x-ball.r&&ball.x<=paddle.x+paddle.w+ball.r){
+ball.y=paddle.y-ball.r;
+let hit=(ball.x-(paddle.x+paddle.w/2))/(paddle.w/2);
+let speed=Math.hypot(ball.vx,ball.vy);
+ball.vx=hit*speed*.85;
+ball.vy=-Math.sqrt(Math.max(4,speed*speed-ball.vx*ball.vx));
+}
+for(const b of bricks){
+if(!b.alive)continue;
+if(ball.x+ball.r>b.x&&ball.x-ball.r<b.x+b.w&&ball.y+ball.r>b.y&&ball.y-ball.r<b.y+b.h){
+b.alive=false;
+const overlapX=Math.min(ball.x+ball.r-b.x,b.x+b.w-(ball.x-ball.r));
+const overlapY=Math.min(ball.y+ball.r-b.y,b.y+b.h-(ball.y-ball.r));
+if(overlapX<overlapY){ball.vx*=-1;ball.x=oldX;}
+else{ball.vy*=-1;ball.y=oldY;}
+score+=10;
+if(score>best){best=score;try{localStorage.setItem("breakoutBest",best)}catch(e){}}
+updateHud();break;
+}
+}
+if(ball.y-ball.r>H){
+lives--;
+if(lives<=0)mode="over";
+else resetBall();
+updateHud();
+}
+if(mode==="playing"&&bricks.every(b=>!b.alive)){
+if(level===5)mode="won";
+else{level++;buildBricks();resetBall();}
+updateHud();
+}
+}
+function draw(){
+ctx.clearRect(0,0,W,H);
+const bg=ctx.createLinearGradient(0,0,0,H);
+bg.addColorStop(0,"#101f3b");bg.addColorStop(1,"#070d1b");
+ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
+ctx.strokeStyle="#ffffff0b";
+for(let x=0;x<W;x+=40){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+for(let y=0;y<H;y+=40){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+for(const b of bricks)if(b.alive){
+ctx.shadowBlur=9;ctx.shadowColor=b.color;
+roundRect(b.x,b.y,b.w,b.h,4,b.color);
+ctx.shadowBlur=0;
+}
+ctx.shadowBlur=20;ctx.shadowColor="#22d3ee";
+roundRect(paddle.x,paddle.y,paddle.w,paddle.h,7,"#22d3ee");
+ctx.shadowBlur=18;ctx.shadowColor="#fff";
+circle(ball.x,ball.y,ball.r,"#fff");
+ctx.shadowBlur=0;
+if(mode!=="playing"){
+ctx.fillStyle="#020817b9";ctx.fillRect(0,0,W,H);
+ctx.textAlign="center";
+ctx.fillStyle="#fff";ctx.font="bold 34px Arial";
+let title=mode==="ready"?"準備發球":mode==="paused"?"遊戲暫停":mode==="won"?"恭喜通關！":"遊戲結束";
+ctx.fillText(title,W/2,H/2-15);
+ctx.fillStyle="#a9c5e6";ctx.font="19px Arial";
+ctx.fillText(mode==="over"||mode==="won"?"按 R 或開始按鈕重新挑戰":"按空白鍵或點擊畫面開始",W/2,H/2+28);
+}
+}
+let last=0,acc=0;
+function loop(time){
+const delta=Math.min(time-last,50);last=time;
+acc+=delta;
+while(acc>=1000/60){update();acc-=1000/60;}
+draw();requestAnimationFrame(loop);
+}
+restart();requestAnimationFrame(loop);
+</script>
+</body>
+</html>
